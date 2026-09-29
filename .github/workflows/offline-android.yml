@@ -11,7 +11,7 @@ on:
   push:
     branches: [main]
 permissions:
-  contents: read
+  contents: write
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -45,3 +45,13 @@ jobs:
           name: RussiaCNMap-Moscow-Oblast-Offline
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+      - name: 发布到 Releases（无需登录即可下载）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk RussiaCNMap-Moscow.apk
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest RussiaCNMap-Moscow.apk \
+            --title "最新离线 APK（莫斯科州）" \
+            --notes "由 ${GITHUB_SHA::7} 构建。直接下载 RussiaCNMap-Moscow.apk 安装即可。" \
+            --target "$GITHUB_SHA"
