@@ -2,7 +2,7 @@
 //   walk：osmium 导出的 GeoJSON 序列（highway 线）→ 步行路网
 //     node --experimental-strip-types scripts/build-nav.mjs walk <highways.geojsonseq> <outDir> <minLon,minLat,maxLon,maxLat>
 //     输出 <outDir>/walk.bin.gz（路网）、<outDir>/walk-names.json.gz（道路名：俄/中/英）
-//   metro：Overpass 返回的地铁线路关系 → 车站与线路
+//   metro：Overpass 返回（.json）或 osmium 导出的 .opl的地铁线路关系 → 车站与线路
 //     node --experimental-strip-types scripts/build-nav.mjs metro <overpass.json> <outDir>
 //     输出 <outDir>/metro.json.gz
 import { createReadStream, mkdirSync, writeFileSync } from "node:fs";
@@ -16,11 +16,38 @@ import { toEn } from "../src/en/index.ts";
 const [, , cmd, input, outDir, bboxArg] = process.argv;
 if ((cmd !== "walk" && cmd !== "metro") || !input || !outDir) { console.error("用法：build-nav.mjs walk <in.geojsonseq> <outDir> [bbox] | metro <overpass.json> <outDir>"); process.exit(2); }
 
+/** 解析 osmium 输出的 OPL 文本（只取车站/线路用得到的字段），得到与 Overpass JSON 相同结构的元素 */
+function parseOpl(text) {
+  const dec = (v) => v.replace(/%([0-9a-fA-F]+)%/g, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+  const out = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    const parts = line.split(" ");
+    const kind = parts[0][0];
+    if (kind !== "n" && kind !== "r") continue;
+    const el = { type: kind === "n" ? "node" : "relation", id: Number(parts[0].slice(1)), tags: {} };
+    if (kind === "r") el.members = [];
+    for (const f of parts.slice(1)) {
+      const c = f[0], v = f.slice(1);
+      if (c === "T" && v) for (const kv of v.split(",")) { const i = kv.indexOf("="); if (i > 0) el.tags[dec(kv.slice(0, i))] = dec(kv.slice(i + 1)); }
+      else if (c === "x" && kind === "n") el.lon = Number(v);
+      else if (c === "y" && kind === "n") el.lat = Number(v);
+      else if (c === "M" && kind === "r" && v) for (const m of v.split(",")) {
+        const at = m.indexOf("@"); const t = m[0];
+        el.members.push({ type: t === "n" ? "node" : t === "w" ? "way" : "relation", ref: Number(m.slice(1, at)), role: dec(m.slice(at + 1)) });
+      }
+    }
+    if (el.type === "node" && (el.lon === undefined || el.lat === undefined)) continue;
+    out.push(el);
+  }
+  return out;
+}
+
 if (cmd === "metro") {
   const { buildMetro } = await import("../src/nav/metro-build.ts");
   const { readFileSync } = await import("node:fs");
-  const json = JSON.parse(readFileSync(input, "utf8"));
-  const data = buildMetro(json.elements ?? []);
+  const elements = input.endsWith(".opl") ? parseOpl(readFileSync(input, "utf8")) : (JSON.parse(readFileSync(input, "utf8")).elements ?? []);
+  const data = buildMetro(elements);
   if (data.stations.length < 5 || data.segments.length < 5) { console.error(`地铁数据太少（${data.stations.length} 站，${data.segments.length} 段），Overpass 返回不对`); process.exit(1); }
   mkdirSync(outDir, { recursive: true });
   writeFileSync(join(outDir, "metro.json.gz"), gzipSync(JSON.stringify(data)));

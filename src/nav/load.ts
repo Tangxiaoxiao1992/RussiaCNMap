@@ -14,22 +14,28 @@ async function gunzip(res: Response): Promise<ArrayBuffer> {
 
 export interface NavData { graph: WalkGraph; metro: Metro | null }
 
+/** Android 打包时会把 .gz 文件解压并去掉后缀，所以两种名字都试 */
+async function fetchAny(dir: string, name: string): Promise<Response | null> {
+  for (const n of [name, name + ".gz"]) {
+    try { const r = await fetch(new URL(n, dir)); if (r.ok && !(r.headers.get("content-type") ?? "").includes("text/html")) return r; } catch { /* 试下一个 */ }
+  }
+  return null;
+}
+
 /** 载入导航数据。步行路网缺失时返回 null；地铁数据缺失只是没有地铁方案。 */
 export async function loadNav(dir: string, onProgress?: (msg: string) => void): Promise<NavData | null> {
   try {
     onProgress?.("walk");
-    const r = await fetch(new URL("walk.bin.gz", dir));
-    if (!r.ok) return null;
-    const [names, data] = await Promise.all([
-      fetch(new URL("walk-names.json.gz", dir)).then(async (x) => (x.ok ? (JSON.parse(new TextDecoder().decode(await gunzip(x))) as NameRow[]) : [["", "", ""]] as NameRow[])),
-      gunzip(r).then(decodeWalk),
-    ]);
-    const graph = new WalkGraph(data, names);
+    const r = await fetchAny(dir, "walk.bin");
+    if (!r) return null;
+    const nr = await fetchAny(dir, "walk-names.json");
+    const names = nr ? (JSON.parse(new TextDecoder().decode(await gunzip(nr))) as NameRow[]) : ([["", "", ""]] as NameRow[]);
+    const graph = new WalkGraph(decodeWalk(new Uint8Array(await gunzip(r))), names);
     let metro: Metro | null = null;
     try {
-      const m = await fetch(new URL("metro.json.gz", dir));
-      if (m.ok) metro = new Metro(JSON.parse(new TextDecoder().decode(await gunzip(m))) as MetroData);
-    } catch { /* 没有地铁数据也能步行导航 */ }
+      const m = await fetchAny(dir, "metro.json");
+      if (m) metro = new Metro(JSON.parse(new TextDecoder().decode(await gunzip(m))) as MetroData);
+    } catch (e) { console.warn("地铁数据无法读取", e); }
     return { graph, metro };
   } catch (e) {
     console.error("载入导航数据失败", e);

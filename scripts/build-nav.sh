@@ -23,17 +23,21 @@ osmium tags-filter "$WORK/area.osm.pbf" w/highway -o "$WORK/highways.osm.pbf" --
 osmium export "$WORK/highways.osm.pbf" -f geojsonseq --geometry-types=linestring -o "$WORK/highways.geojsonseq" --overwrite
 node --experimental-strip-types --no-warnings scripts/build-nav.mjs walk "$WORK/highways.geojsonseq" "$OUT" "$NAV_BBOX"
 
-# 地铁：route=subway/light_rail 关系（Overpass 有几个镜像，逐个试）
+# 地铁：优先直接从同一份 OSM 数据里抽 route=subway/light_rail 关系（不依赖外部接口）
 IFS=',' read -r W S E N <<<"$NAV_BBOX"
-QUERY="[out:json][timeout:240];(relation[\"route\"~\"^(subway|light_rail)\$\"]($S,$W,$N,$E););out body;>;out skel qt;"
 ok=0
-for EP in https://overpass-api.de/api/interpreter https://overpass.kumi.systems/api/interpreter https://overpass.private.coffee/api/interpreter; do
-  if curl -fsS --retry 2 --max-time 300 --data-urlencode "data=$QUERY" "$EP" -o "$WORK/metro.json" && [ -s "$WORK/metro.json" ]; then ok=1; break; fi
-  echo "Overpass 镜像失败：$EP" >&2
-done
-if [ "$ok" = 1 ]; then
-  node --experimental-strip-types --no-warnings scripts/build-nav.mjs metro "$WORK/metro.json" "$OUT"
+if osmium tags-filter "$WORK/area.osm.pbf" r/route=subway,light_rail -o "$WORK/metro.osm.pbf" --overwrite \
+   && osmium cat "$WORK/metro.osm.pbf" -f opl -o "$WORK/metro.opl" --overwrite \
+   && node --experimental-strip-types --no-warnings scripts/build-nav.mjs metro "$WORK/metro.opl" "$OUT"; then
+  ok=1
 else
-  echo "⚠ 没取到地铁数据：只提供步行导航" >&2
+  echo "从 OSM 数据抽取地铁失败，改用 Overpass" >&2
+  QUERY="[out:json][timeout:240];(relation[\"route\"~\"^(subway|light_rail)\$\"]($S,$W,$N,$E););out body;>;out skel qt;"
+  for EP in https://overpass-api.de/api/interpreter https://overpass.kumi.systems/api/interpreter https://overpass.private.coffee/api/interpreter; do
+    if curl -fsS --retry 2 --max-time 300 --data-urlencode "data=$QUERY" "$EP" -o "$WORK/metro.json" && [ -s "$WORK/metro.json" ] \
+       && node --experimental-strip-types --no-warnings scripts/build-nav.mjs metro "$WORK/metro.json" "$OUT"; then ok=1; break; fi
+    echo "Overpass 镜像失败：$EP" >&2
+  done
 fi
+[ "$ok" = 1 ] || echo "⚠ 没取到地铁数据：只提供步行导航" >&2
 ls -lh "$OUT"

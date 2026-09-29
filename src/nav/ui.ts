@@ -110,6 +110,20 @@ export class NavUI {
     return this.compass;
   }
 
+  private badge: HTMLElement | undefined;
+  private showAccuracy(f: Fix) {
+    if (!this.badge) { this.badge = document.createElement("div"); this.badge.className = "accbadge"; document.getElementById("app")!.appendChild(this.badge); }
+    const a = f.accuracy;
+    this.badge.textContent = a ? `±${Math.round(a)}m` : "";
+    this.badge.style.color = !a ? "#52606d" : a <= 30 ? "#1b7f3b" : a <= 100 ? "#b26a00" : "#c0341d";
+    const src = this.map.getSource("me-acc") as GeoJSONSource | undefined;
+    if (src && a) {
+      const k = Math.cos((f.lat * Math.PI) / 180), pts: [number, number][] = [];
+      for (let i = 0; i <= 48; i++) { const t = (i / 48) * 2 * Math.PI; pts.push([f.lon + (a * Math.cos(t)) / (111320 * k), f.lat + (a * Math.sin(t)) / 110540]); }
+      src.setData({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [pts] } });
+    }
+  }
+
   private updateDot() {
     const f = this.lastFix;
     if (!f) return;
@@ -120,6 +134,7 @@ export class NavUI {
       this.me = new Marker({ element: el, rotationAlignment: "map" }).setLngLat([f.lon, f.lat]).addTo(this.map);
     }
     this.me.setLngLat([f.lon, f.lat]);
+    this.showAccuracy(f);
     const h = this.heading();
     if (this.cone) { this.cone.style.display = h === undefined ? "none" : "block"; if (h !== undefined) this.cone.style.transform = `rotate(${h}deg)`; }
   }
@@ -127,6 +142,8 @@ export class NavUI {
   /** 收到一个定位点（真实 GPS 或测试注入） */
   feed(f: Fix) {
     const now = Date.now();
+    // 精度很差的点（多半是基站/缓存定位）不要覆盖刚拿到的好定位
+    if (f.accuracy && f.accuracy > 150 && this.lastFix && now - this.lastFixAt < 20000 && (this.lastFix.accuracy ?? 999) < f.accuracy) return;
     if (this.lastFix && typeof f.speed !== "number") {
       const dt = (now - this.lastFixAt) / 1000;
       if (dt > 0.5) { const dx = (f.lon - this.lastFix.lon) * 111320 * Math.cos((f.lat * Math.PI) / 180), dy = (f.lat - this.lastFix.lat) * 110540; f.speed = Math.hypot(dx, dy) / dt; }
@@ -142,6 +159,8 @@ export class NavUI {
   // ————— 路线图层
   private ensureLayers() {
     if (this.map.getSource("route")) return;
+    this.map.addSource("me-acc", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+    this.map.addLayer({ id: "me-acc", type: "fill", source: "me-acc", paint: { "fill-color": "#1a73e8", "fill-opacity": 0.12 } });
     this.map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
     this.map.addLayer({ id: "route-casing", type: "line", source: "route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#fff", "line-width": 9, "line-opacity": 0.95 } });
     this.map.addLayer({ id: "route-ride", type: "line", source: "route", filter: ["==", ["get", "kind"], "ride"], layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["get", "color"], "line-width": 6 } });

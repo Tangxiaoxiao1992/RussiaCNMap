@@ -65,3 +65,4 @@ body:has(.navbar:not([hidden])) .maplibregl-ctrl-bottom-right{bottom:72px}
 .route.lines{max-height:55vh}
 .route .lbtn{width:100%;background:none;border:0;border-top:1px solid #f0f2f4;text-align:left;font-size:15px}
 .route .back{border:0;background:none;color:#1a73e8;font-size:16px;padding:0 6px 0 0}
+.accbadge{position:absolute;z-index:6;right:60px;top:calc(46% + 14px);font-size:12px;font-weight:700;background:#fffe;border-radius:8px;padding:2px 6px;pointer-events:none}
