@@ -1,1 +1,22 @@
-{"name":"russia-cn-map","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"vite","build":"tsc && vite build","preview":"vite preview"},"dependencies":{"maplibre-gl":"^5.7.1"},"devDependencies":{"typescript":"^5.9.2","vite":"^7.1.7"}}
+{
+  "name": "russia-cn-map",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "android:sync": "npm run build && npx cap sync android"
+  },
+  "dependencies": {
+    "maplibre-gl": "^5.7.1",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/android": "^7.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "@capacitor/cli": "^7.4.3"
+  }
+}
