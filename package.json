@@ -12,7 +12,8 @@
   "dependencies": {
     "maplibre-gl": "^5.7.1",
     "@capacitor/core": "^7.4.3",
-    "@capacitor/android": "^7.4.3"
+    "@capacitor/android": "^7.4.3",
+    "pmtiles": "^4.3.0"
   },
   "devDependencies": {
     "typescript": "^5.9.2",
