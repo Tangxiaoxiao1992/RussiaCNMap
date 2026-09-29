@@ -1,4 +1,4 @@
-import maplibregl,{Map,Marker,NavigationControl,GeolocateControl} from "maplibre-gl";
+import {Map,Marker,NavigationControl,GeolocateControl} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css"; import "./style.css"; import {searchPlaces,type SearchResult} from "./services/search";
 const app=document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML=`<main class="shell"><header><div class="brand"><strong>俄罗斯中文地图</strong><span>RussiaCNMap · 开源预览版</span></div><form id="search"><input id="q" autocomplete="off" placeholder="搜索中文 / 俄文 / 英文，例如：莫航、红场、SVO"/><button>搜索</button></form><div id="results" class="results"></div></header><div id="map"></div><aside id="card" class="card hidden"></aside><footer>中文优先 · 保留俄文原名 · 数据源 OpenStreetMap</footer></main>`;
