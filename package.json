@@ -1,0 +1,1 @@
+{"name":"russia-cn-map","private":true,"version":"0.1.0","type":"module","scripts":{"dev":"vite","build":"tsc && vite build","preview":"vite preview"},"dependencies":{"maplibre-gl":"^5.7.1"},"devDependencies":{"typescript":"^5.9.2","vite":"^7.1.7"}}
