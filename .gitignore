@@ -11,3 +11,4 @@ public/places-index.json
 android
 pmtiles
 *.pmtiles
+public/nav/

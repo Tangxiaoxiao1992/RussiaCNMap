@@ -47,3 +47,12 @@ Android WebView 里 Capacitor 的本地服务器对 HTTP Range 请求的实现�
 ## 数据与许可
 
 地图数据来自 OpenStreetMap（ODbL，需署名，地图右下角已带），底图瓦片由 Protomaps 每日构建。代码许可见 LICENSE。
+
+## 离线定位与导航
+
+- **定位**：右侧 ◎ 按钮，用手机 GPS，完全离线。
+- **路线**：点地图或搜索到一个地点 → 卡片里点「路线」→ 给出 **步行** 和 **地铁换乘** 两个方案，并估算时间和到达时刻（时间为经验估算，含进站/候车）。起点默认是当前位置，也可以「改起点」后在地图上点选。
+- **导航**：跟随蓝点，顶部显示下一步（中/英/俄随标注语言），**语音播报**（用手机系统的 TTS，需要系统里有对应语言的语音包），偏离路线自动重算，可静音。
+- **范围**：导航只覆盖莫斯科市区+近郊（`NAV_BBOX`，默认 `37.0,55.45,38.2,56.05`），地图仍是整个莫斯科州。
+- **数据**：`bash scripts/build-nav.sh`（需要 osmium-tool）从 Geofabrik 的 OSM 数据抽出步行路网，从 Overpass 取地铁线路，生成到 `public/nav/`。CI 里这一步失败不会影响地图 APK，只是「路线」会提示没有导航数据。
+- **测试**：`npm run test:nav`（算法）；`npm run fixture:nav && npm run build && npx vite preview --port 4173` 后 `npm run e2e:nav`（假数据 + 模拟 GPS 的浏览器端到端）。

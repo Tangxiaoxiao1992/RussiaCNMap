@@ -1,4 +1,4 @@
-import { Map as MapLibre, Marker, NavigationControl, GeolocateControl, ScaleControl, addProtocol } from "maplibre-gl";
+import { Map as MapLibre, Marker, NavigationControl, ScaleControl, addProtocol } from "maplibre-gl";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "./style.css";
@@ -9,6 +9,8 @@ import { addNames } from "./tile-names";
 import { loadIndex, search, indexSize, kindLabel, type Hit } from "./services/search";
 import { toZh } from "./zh/index";
 import { toEn } from "./en/index";
+import { NavUI } from "./nav/ui";
+import { UI, t as tr, type Lang } from "./nav/i18n";
 import { MODES, applyLabelMode, nameLayerIds, type LabelMode } from "./labels";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -58,8 +60,15 @@ const map = new MapLibre({
   attributionControl: { compact: true },
 });
 map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
-map.addControl(new GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }), "bottom-right");
 map.addControl(new ScaleControl({ unit: "metric" }), "bottom-left");
+
+// —— 导航（数据在 nav/ 目录，缺失时只是不能导航）
+const navLang = (): Lang => (mode === "en" ? "en" : mode === "ru" ? "ru" : "zh");
+const nav = new NavUI({
+  map, navDir: new URL("nav/", base).href, getLang: navLang,
+  onPanel: (open) => { if (open) card.hidden = true; else if (current) showPlace(current.names, current.kind, current.at, false); },
+});
+nav.wire();
 
 // —— 标注语言切换（不重新加载瓦片，直接改样式）
 let labelIds: string[] = [];
@@ -73,6 +82,7 @@ langs.addEventListener("click", (e) => {
   try { localStorage.setItem(STORE, mode); } catch { /* ignore */ }
   markMode(); applyLabelMode(map, mode, labelIds);
   renderResults(); // 结果列表的主语言也跟着变
+  nav.refresh();
   if (current) showPlace(current.names, current.kind, current.at, false);
 });
 markMode();
@@ -147,7 +157,8 @@ function showPlace(names: Names, kind: number, at: [number, number], fly: boolea
   if (fly) map.flyTo({ center: at, zoom: Math.max(map.getZoom(), kind <= 1 ? 11 : 15.5), essential: true });
   const [first, ...rest] = lines(names);
   card.hidden = false;
-  card.innerHTML = `<button class="close" aria-label="关闭 / Close">×</button><span class="tag">${esc(kindLabel(kind))}</span><h2>${esc(first)}</h2>${rest.map((r) => `<p class="alt">${esc(r)}</p>`).join("")}<p class="coords">${at[1].toFixed(5)}, ${at[0].toFixed(5)}</p>`;
+  card.innerHTML = `<button class="close" aria-label="关闭 / Close">×</button><span class="tag">${esc(kindLabel(kind))}</span><h2>${esc(first)}</h2>${rest.map((r) => `<p class="alt">${esc(r)}</p>`).join("")}<p class="coords">${at[1].toFixed(5)}, ${at[0].toFixed(5)}</p><button class="dir" data-act="dir">🧭 ${esc(tr(UI.directions, navLang()))} / Directions</button>`;
+  card.querySelector(".dir")!.addEventListener("click", () => nav.open({ lon: at[0], lat: at[1], name: first }));
   card.querySelector(".close")!.addEventListener("click", () => { card.hidden = true; current = undefined; marker?.remove(); });
 }
 
@@ -158,6 +169,8 @@ const KIND_IDX: Record<string, number> = {
   river: 6, lake: 6, park: 7, garden: 7, aerodrome: 9, university: 10, college: 10,
 };
 map.on("click", (e) => {
+  if (nav.isPicking()) { nav.pick(e.lngLat.lng, e.lngLat.lat); return; }
+  if (nav.isActive()) return;
   results.hidden = true; input.blur();
   const r = 8;
   const feats = map.queryRenderedFeatures([[e.point.x - r, e.point.y - r], [e.point.x + r, e.point.y + r]])
@@ -178,4 +191,5 @@ map.on("click", (e) => {
 });
 
 // 调试/自动化测试用
-(window as unknown as { __map: MapLibre }).__map = map;
+(window as unknown as { __map: MapLibre; __nav: NavUI }).__map = map;
+(window as unknown as { __nav: NavUI }).__nav = nav;

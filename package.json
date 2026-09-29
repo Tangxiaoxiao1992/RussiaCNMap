@@ -10,7 +10,10 @@
     "android:sync": "npm run build && npx cap sync android",
     "data": "bash scripts/build-data.sh",
     "fixture": "node scripts/make-fixture.mjs",
-    "test:names": "node --experimental-strip-types scripts/test-names.mjs"
+    "test:names": "node --experimental-strip-types scripts/test-names.mjs",
+    "test:nav": "node --experimental-strip-types --no-warnings scripts/test-nav.mjs",
+    "fixture:nav": "node --experimental-strip-types --no-warnings scripts/make-nav-fixture.mjs",
+    "e2e:nav": "node scripts/e2e-nav.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",

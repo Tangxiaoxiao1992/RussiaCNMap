@@ -26,13 +26,19 @@ jobs:
           java-version: '21'
       - run: npm ci
       - run: npm run test:names
+      - run: npm run test:nav
       - name: 截取莫斯科州地图数据 + 生成汉语搜索索引
         env:
           BBOX: ${{ inputs.bbox || '34.85,54.25,40.25,57.05' }}
           MAXZOOM: ${{ inputs.maxzoom || '14' }}
         run: bash scripts/build-data.sh
+      - name: 生成离线导航数据（步行路网 + 地铁；失败时只是没有导航，地图 APK 照常构建）
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+          bash scripts/build-nav.sh
       - run: npx cap add android
-      - name: 允许定位（GeolocateControl 需要）
+      - name: 允许定位（导航需要）
         run: |
           sed -i 's|</manifest>|    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
           grep -n "LOCATION" android/app/src/main/AndroidManifest.xml
