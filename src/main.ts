@@ -3,7 +3,7 @@ import "maplibre-gl/dist/maplibre-gl.css"; import "./style.css"; import {searchP
 const app=document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML=`<main class="shell"><header><div class="brand"><strong>俄罗斯中文地图</strong><span>RussiaCNMap · 开源预览版</span></div><form id="search"><input id="q" autocomplete="off" placeholder="搜索中文 / 俄文 / 英文，例如：莫航、红场、SVO"/><button>搜索</button></form><div id="results" class="results"></div></header><div id="map"></div><aside id="card" class="card hidden"></aside><footer>中文优先 · 俄文兜底 · 数据源 OpenStreetMap</footer></main>`;
 const STYLE_URL="https://tiles.openfreemap.org/styles/liberty";
-const map=new Map({container:"map",style:STYLE_URL,center:[37.6173,55.7558],zoom:10.8,attributionControl:true});
+const map=new Map({container:"map",style:STYLE_URL,center:[37.6173,55.7558],zoom:10.8,attributionControl:{}});
 map.addControl(new NavigationControl(),"bottom-right"); map.addControl(new GeolocateControl({positionOptions:{enableHighAccuracy:true},trackUserLocation:true}),"bottom-right");
 function localizeMapLabels(){
  const style=map.getStyle() as StyleSpecification;
