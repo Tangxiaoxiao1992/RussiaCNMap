@@ -1,5 +1,6 @@
-// 汉语地名规则的回归测试：node --experimental-strip-types scripts/test-zh.mjs
+// 汉语 / 英语地名规则的回归测试：npm run test:names
 import { toZh } from "../src/zh/index.ts";
+import { toEn } from "../src/en/index.ts";
 const cases = [
   ["Красная площадь", "红场"], ["улица Пушкина", "普希金街"], ["Ленинградский проспект", "列宁格勒大街"],
   ["Тверская улица", "特维尔街"], ["Кутузовский проспект", "库图佐夫大街"], ["Проспект Вернадского", "韦尔纳茨基大街"],
@@ -15,5 +16,15 @@ const check = (input, want, ctx) => { const got = toZh(input, ctx); if (got !== 
 for (const [i, w] of cases) check(i, w, {});
 for (const [i, w] of station) check(i, w, { station: true });
 for (const s of ["红场", "Starbucks", "", "123"]) if (toZh(s) !== undefined) { bad++; console.error(`✗ ${s} 应返回 undefined`); }
+const en = [
+  ["Красная площадь", "Red Square"], ["улица Пушкина", "Pushkin Street"], ["Ленинградский проспект", "Leningradsky Prospekt"],
+  ["Тверская улица", "Tverskaya Street"], ["Кутузовский проспект", "Kutuzovsky Prospekt"], ["Проспект Вернадского", "Vernadsky Prospekt"],
+  ["Ярославское шоссе", "Yaroslavskoye Highway"], ["Парк Победы", "Victory Park"], ["Москва", "Moscow"], ["Химки", "Khimki"],
+  ["Международный аэропорт Шереметьево", "Sheremetyevo International Airport"], ["1-я Тверская-Ямская улица", "1st Tverskaya-Yamskaya Street"],
+  ["Большой Козловский переулок", "Bolshoy Kozlovsky Lane"], ["Песчаная улица", "Peschanaya Street"], ["Воробьёвы горы", "Sparrow Hills"],
+  ["Московский авиационный институт", "Moscow Aviation Institute"], ["Китай-город", "Kitay-gorod"], ["Мытищи", "Mytishchi"],
+];
+for (const [i, w] of en) { const got = toEn(i); if (got !== w) { bad++; console.error(`✗ EN ${i} → ${got}（期望 ${w}）`); } }
+for (const s of ["Starbucks", "红场", "", "123"]) if (toEn(s) !== undefined) { bad++; console.error(`✗ EN ${s} 应返回 undefined`); }
 if (bad) process.exit(1);
-console.log(`汉语地名规则：${cases.length + station.length + 4} 项通过`);
+console.log(`地名规则：汉语 ${cases.length + station.length + 4} 项、英语 ${en.length + 4} 项通过`);

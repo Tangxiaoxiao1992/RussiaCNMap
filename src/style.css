@@ -20,3 +20,8 @@
 [hidden]{display:none!important}
 .maplibregl-ctrl-bottom-right{bottom:calc(env(safe-area-inset-bottom) + 6px)}
 @media(min-width:700px){.card{left:18px}.top{left:18px}}
+.langs{display:flex;gap:6px;margin-top:8px}
+.langs button{height:30px;min-width:44px;padding:0 12px;border:0;border-radius:15px;background:rgba(255,255,255,.95);box-shadow:0 2px 8px #1822301f;font:600 13px/1 inherit;color:#52667a;cursor:pointer}
+.langs button.on{background:var(--brand);color:#fff}
+.card .alt{margin:2px 0 0;color:#52606d;font-size:14px}
+.status{top:calc(max(10px,env(safe-area-inset-top)) + 96px)}

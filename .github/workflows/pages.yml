@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npm run test:zh
+      - run: npm run test:names
       - name: 网页演示只带莫斯科市区，控制体积（整个莫斯科州请用 APK）
         env:
           BBOX: "37.30,55.48,37.95,55.97"

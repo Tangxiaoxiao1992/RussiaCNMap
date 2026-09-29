@@ -1,10 +1,11 @@
-// 扫描 pmtiles 里的地名，生成离线搜索索引 places-index.json
+// 扫描 pmtiles 里的地名，生成离线三语（中/英/俄）搜索索引 places-index.json
 // 用法：node --experimental-strip-types scripts/build-index.mjs <in.pmtiles> <out.json>
 import { openSync, readSync, writeFileSync, statSync, closeSync } from "node:fs";
 import { PMTiles } from "pmtiles";
 import { VectorTile } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { toZh } from "../src/zh/index.ts";
+import { toEn } from "../src/en/index.ts";
 
 const [, , input, output] = process.argv;
 if (!input || !output) { console.error("用法：build-index.mjs <in.pmtiles> <out.json>"); process.exit(2); }
@@ -85,7 +86,8 @@ async function work() {
         const han = /[一-鿿]/.test(p.name);
         const zh = p["name:zh-Hans"] || p["name:zh"] || (han ? p.name : toZh(p.name, { station: k === 3 })) || p.name;
         const ru = han ? p["name:ru"] || "" : p.name;
-        seen.set(key, [zh, ru, k, +lon.toFixed(4), +lat.toFixed(4)]);
+        const en = p["name:en"] || toEn(ru || p.name) || (/[A-Za-z]/.test(p.name) ? p.name : "");
+        seen.set(key, en && en !== zh && en !== ru ? [zh, ru, k, +lon.toFixed(4), +lat.toFixed(4), en] : [zh, ru, k, +lon.toFixed(4), +lat.toFixed(4)]);
       }
     }
     if (tiles % 5000 === 0) console.log(`  已处理 ${tiles} 张瓦片，${seen.size} 个地名`);

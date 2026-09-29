@@ -10,7 +10,7 @@
     "android:sync": "npm run build && npx cap sync android",
     "data": "bash scripts/build-data.sh",
     "fixture": "node scripts/make-fixture.mjs",
-    "test:zh": "node --experimental-strip-types scripts/test-zh.mjs"
+    "test:names": "node --experimental-strip-types scripts/test-names.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",
