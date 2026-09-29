@@ -48,6 +48,10 @@ Android WebView 里 Capacitor 的本地服务器对 HTTP Range 请求的实现�
 
 地图数据来自 OpenStreetMap（ODbL，需署名，地图右下角已带），底图瓦片由 Protomaps 每日构建。代码许可见 LICENSE。
 
+## 搜索
+
+支持中/英/俄三语、词序无关（`moscow art` 也能找到 `Art Moscow`）、容错错别字（`tretyakov galery`）。地点来自两份索引：地图瓦片里的地名，加上 `scripts/build-places.sh` 从 OSM 数据抽取的全部有名字的地点（店铺、餐饮、展览、酒店、景点、医院等，含品牌和别名）。
+
 ## 离线定位与导航
 
 - **定位**：右侧 ◎ 按钮，用手机 GPS，完全离线。

@@ -128,7 +128,7 @@ const card = $("card");
 let marker: Marker | undefined;
 let hits: Hit[] = [];
 let current: { names: Names; kind: number; at: [number, number] } | undefined;
-const indexReady = loadIndex(new URL("places-index.json", base).href);
+const indexReady = loadIndex([new URL("places-index.json", base).href, new URL("places-osm.json", base).href]);
 
 function renderResults() {
   const q = input.value.trim();
@@ -144,7 +144,8 @@ function renderResults() {
     return `<button data-i="${i}"><b>${esc(first)}</b><span>${esc(rest.join(" · "))}</span><i>${esc(kindLabel(h.kind))}</i></button>`;
   }).join("");
 }
-input.addEventListener("input", () => { void indexReady.then(renderResults); renderResults(); });
+let typing: number | undefined;
+input.addEventListener("input", () => { clearTimeout(typing); typing = window.setTimeout(() => { void indexReady.then(renderResults); renderResults(); }, 140); });
 input.addEventListener("focus", renderResults);
 $("search").addEventListener("submit", (e) => { e.preventDefault(); renderResults(); (results.querySelector("button") as HTMLButtonElement | null)?.click(); input.blur(); });
 results.addEventListener("click", (e) => {

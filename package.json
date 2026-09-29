@@ -13,7 +13,8 @@
     "test:names": "node --experimental-strip-types scripts/test-names.mjs",
     "test:nav": "node --experimental-strip-types --no-warnings scripts/test-nav.mjs",
     "fixture:nav": "node --experimental-strip-types --no-warnings scripts/make-nav-fixture.mjs",
-    "e2e:nav": "node scripts/e2e-nav.mjs"
+    "e2e:nav": "node scripts/e2e-nav.mjs",
+    "test:search": "node --experimental-strip-types --no-warnings scripts/test-search.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^7.4.3",

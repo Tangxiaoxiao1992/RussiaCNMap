@@ -27,11 +27,19 @@ jobs:
       - run: npm ci
       - run: npm run test:names
       - run: npm run test:nav
+      - run: npm run test:search
       - name: 截取莫斯科州地图数据 + 生成汉语搜索索引
         env:
           BBOX: ${{ inputs.bbox || '34.85,54.25,40.25,57.05' }}
           MAXZOOM: ${{ inputs.maxzoom || '14' }}
         run: bash scripts/build-data.sh
+      - name: 抽取全部有名字的地点（店铺/餐饮/展览/酒店…）用于离线搜索，失败时只是搜索范围小一些
+        continue-on-error: true
+        env:
+          BBOX: ${{ inputs.bbox || '34.85,54.25,40.25,57.05' }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq osmium-tool
+          bash scripts/build-places.sh
       - name: 生成离线导航数据（步行路网 + 地铁；失败时只是没有导航，地图 APK 照常构建）
         continue-on-error: true
         run: |
