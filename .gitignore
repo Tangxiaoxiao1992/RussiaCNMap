@@ -5,3 +5,9 @@ dist
 !.env.example
 .DS_Store
 .vscode
+public/*.pmtiles
+public/data/
+public/places-index.json
+android
+pmtiles
+*.pmtiles

@@ -1,18 +1,56 @@
-import { aliasPlaces, type AliasPlace } from "../data/aliases";
-export type SearchResult={id:string;zh:string;ru:string;subtitle:string;center:[number,number];source:"alias"|"nominatim"};
-const normalize=(s:string)=>s.trim().toLocaleLowerCase();
-const memory=new Map<string,SearchResult[]>();
-export async function searchPlaces(query:string):Promise<SearchResult[]>{
- const q=normalize(query); if(!q)return [];
- const local=aliasPlaces.filter((p:AliasPlace)=>[p.zh,p.ru,p.en??"",...p.aliases].some(x=>normalize(x).includes(q))).map(p=>({id:p.id,zh:p.zh,ru:p.ru,subtitle:p.category,center:p.center,source:"alias" as const}));
- const cached=memory.get(q); if(cached)return [...local,...cached].slice(0,8);
- const saved=localStorage.getItem("search:"+q); if(saved){try{const hit=JSON.parse(saved) as SearchResult[];memory.set(q,hit);return [...local,...hit].slice(0,8);}catch{}}
- try{
-  const url=new URL("https://nominatim.openstreetmap.org/search"); url.searchParams.set("q",query); url.searchParams.set("format","jsonv2"); url.searchParams.set("limit","5"); url.searchParams.set("accept-language","zh-CN,zh,ru,en"); url.searchParams.set("countrycodes","ru"); url.searchParams.set("addressdetails","0");
-  const res=await fetch(url,{headers:{"Accept":"application/json"},signal:AbortSignal.timeout(2800)}); if(!res.ok)throw new Error("search failed");
-  const data=await res.json() as Array<{place_id:number;display_name:string;lat:string;lon:string;name?:string}>;
-  const remote=data.map(x=>({id:`osm-${x.place_id}`,zh:x.name||x.display_name.split(",")[0],ru:x.display_name,subtitle:"OpenStreetMap",center:[Number(x.lon),Number(x.lat)] as [number,number],source:"nominatim" as const}));
-  memory.set(q,remote); localStorage.setItem("search:"+q,JSON.stringify(remote));
-  return [...local,...remote.filter(r=>!local.some(l=>Math.abs(l.center[0]-r.center[0])<0.0001&&Math.abs(l.center[1]-r.center[1])<0.0001))].slice(0,8);
- }catch{return local.slice(0,8);}
+import { aliasPlaces } from "../data/aliases";
+
+/** places-index.json 里每一项：[汉语名, 俄文名, 类别编号, 经度, 纬度] */
+export type IndexEntry = [string, string, number, number, number];
+export const KINDS = ["城市", "城镇", "村庄", "地铁/火车站", "景点", "道路", "水体", "公园", "地点", "机场", "大学"];
+
+export type Hit = { zh: string; ru: string; kind: string; center: [number, number] };
+
+const norm = (s: string) => s.toLowerCase().replace(/ё/g, "е").replace(/[\s\-·,.]/g, "");
+let index: IndexEntry[] = [];
+let normed: string[] = [];
+let loaded: Promise<boolean> | undefined;
+
+export function loadIndex(url: string): Promise<boolean> {
+  loaded ??= fetch(url).then(async (r) => {
+    if (!r.ok) return false;
+    index = (await r.json()) as IndexEntry[];
+    normed = index.map((e) => norm(e[0]) + "|" + norm(e[1]));
+    return true;
+  }).catch(() => false);
+  return loaded;
+}
+
+export function indexSize() { return index.length; }
+
+export function search(query: string, limit = 25): Hit[] {
+  const q = norm(query);
+  if (!q) return [];
+  const out: Array<{ h: Hit; score: number }> = [];
+  for (const p of aliasPlaces) {
+    const names = [p.zh, p.ru, p.en ?? "", ...p.aliases].map(norm);
+    if (names.some((n) => n === q)) out.push({ h: { zh: p.zh, ru: p.ru, kind: p.category, center: p.center }, score: -2 });
+    else if (names.some((n) => n.includes(q))) out.push({ h: { zh: p.zh, ru: p.ru, kind: p.category, center: p.center }, score: -1 });
+  }
+  for (let i = 0; i < index.length; i++) {
+    const s = normed[i];
+    const at = s.indexOf(q);
+    if (at < 0) continue;
+    const [zh, ru, k, lon, lat] = index[i];
+    const zhN = norm(zh), ruN = norm(ru);
+    // 整名相同 < 名字开头 < 包含；城市/车站/景点排在道路和小地点前
+    const base = zhN === q || ruN === q ? 0 : zhN.startsWith(q) || ruN.startsWith(q) ? 10 : 20;
+    const kindRank = [0, 1, 3, 1, 1, 4, 3, 2, 5, 0, 1][k] ?? 5;
+    out.push({ h: { zh, ru, kind: KINDS[k] ?? "地点", center: [lon, lat] }, score: base + kindRank + at / 100 });
+  }
+  out.sort((a, b) => a.score - b.score);
+  const seen = new Set<string>();
+  const res: Hit[] = [];
+  for (const { h } of out) {
+    const key = h.zh + h.ru + h.center[0].toFixed(2) + h.center[1].toFixed(2);
+    if (seen.has(key)) continue;
+    seen.add(key); res.push(h);
+    if (res.length >= limit) break;
+  }
+  return res;
 }

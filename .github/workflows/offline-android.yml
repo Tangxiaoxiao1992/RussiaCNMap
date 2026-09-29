@@ -1,6 +1,13 @@
-name: Build Moscow Offline APK
+name: Build Moscow Oblast Offline APK
 on:
   workflow_dispatch:
+    inputs:
+      bbox:
+        description: "范围 minLon,minLat,maxLon,maxLat（默认莫斯科州）"
+        default: "34.85,54.25,40.25,57.05"
+      maxzoom:
+        description: "最大级别（14 已含街道与建筑；13 可明显减小体积）"
+        default: "14"
   push:
     branches: [main]
 permissions:
@@ -17,25 +24,24 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - run: npm install
-      - name: Download PMTiles CLI
-        run: |
-          curl -L https://github.com/protomaps/go-pmtiles/releases/download/v1.28.0/go-pmtiles_1.28.0_Linux_x86_64.tar.gz -o pmtiles.tar.gz
-          tar -xzf pmtiles.tar.gz
-          chmod +x pmtiles
-      - name: Extract Moscow offline map
-        run: |
-          mkdir -p public
-          DATE=$(date -u -d "2 days ago" +%Y%m%d)
-          ./pmtiles extract "https://build.protomaps.com/${DATE}.pmtiles" public/moscow.pmtiles --bbox=37.30,55.55,37.90,55.95 --maxzoom=15
-          ls -lh public/moscow.pmtiles
+      - run: npm ci
+      - run: npm run test:zh
+      - name: 截取莫斯科州地图数据 + 生成汉语搜索索引
+        env:
+          BBOX: ${{ inputs.bbox || '34.85,54.25,40.25,57.05' }}
+          MAXZOOM: ${{ inputs.maxzoom || '14' }}
+        run: bash scripts/build-data.sh
       - run: npx cap add android
+      - name: 允许定位（GeolocateControl 需要）
+        run: |
+          sed -i 's|</manifest>|    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n</manifest>|' android/app/src/main/AndroidManifest.xml
+          grep -n "LOCATION" android/app/src/main/AndroidManifest.xml
       - run: npm run android:sync
       - name: Build APK
         working-directory: android
         run: ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: RussiaCNMap-Moscow-Offline
+          name: RussiaCNMap-Moscow-Oblast-Offline
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30

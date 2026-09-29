@@ -1,23 +1,30 @@
 {
   "name": "russia-cn-map",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "android:sync": "npm run build && npx cap sync android"
+    "android:sync": "npm run build && npx cap sync android",
+    "data": "bash scripts/build-data.sh",
+    "fixture": "node scripts/make-fixture.mjs",
+    "test:zh": "node --experimental-strip-types scripts/test-zh.mjs"
   },
   "dependencies": {
-    "maplibre-gl": "^5.7.1",
-    "@capacitor/core": "^7.4.3",
     "@capacitor/android": "^7.4.3",
-    "pmtiles": "^4.3.0"
+    "@capacitor/core": "^7.4.3",
+    "@mapbox/vector-tile": "^3.0.0",
+    "@protomaps/basemaps": "^5.7.2",
+    "maplibre-gl": "^5.7.1",
+    "pbf": "^5.1.2",
+    "pmtiles": "^4.3.0",
+    "vt-pbf": "^3.1.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
     "typescript": "^5.9.2",
-    "vite": "^7.1.7",
-    "@capacitor/cli": "^7.4.3"
+    "vite": "^7.1.7"
   }
 }

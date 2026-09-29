@@ -1,42 +1,48 @@
-# RussiaCNMap / 俄罗斯中文地图
+# RussiaCNMap / 莫斯科州离线中文地图
 
-面向中文用户的俄罗斯中俄双语开源地图。目标不是复制 Yandex Maps，而是在 OpenStreetMap 生态上增加适合中文用户的名称、别名、搜索和旅行信息层。
+手机上完全离线可用的莫斯科州地图：**地名以汉语为主、俄文原名在下方对照**，可以搜索、点选识别、GPS 定位。暂不做导航。
 
-## 当前 MVP
+## 它是怎么做到的
 
-- MapLibre GL JS 地图，默认莫斯科视角
-- 中文 / 俄文 / 英文搜索
-- 内置中文别名：例如“莫航”、红场、SVO
-- 俄罗斯范围 OpenStreetMap / Nominatim 搜索兜底
-- 地点中俄双语详情卡
-- 浏览器定位、缩放与旋转
-- 移动端响应式布局
+| 需求 | 做法 |
+|---|---|
+| 离线 | Protomaps 每日 OSM 底图截出莫斯科州 → 打进 APK 的 `assets`；字体、图标、搜索索引也全部本地 |
+| 汉语地名 | 每张瓦片在手机上解码时，给每个俄文名补上汉语名：**OSM 已有的中文名优先 → 人工词典 → 通名规则（улица→街）+ 俄→汉音译**；地图上第一行汉语、第二行俄文 |
+| 汉语搜索 | 构建时扫描全部瓦片，生成 `places-index.json`（汉语名 + 俄文名 + 类别 + 坐标），手机上本地搜索，输入汉语、俄文、别名（莫航、莫大、SVO）都行 |
+| 点选识别 | 点地图上的街道/车站/建筑，弹出汉语名 + 俄文原名 |
 
-## 本地运行
+汉语名的三个来源，可信度依次降低：OSM 上人工标注的中文名（有就用）→ `src/zh/dict.ts` 里的人工词典（地铁站、城市、地标、大学）→ 音译（如“佩斯恰纳娅街”）。音译只是"能读出来、能对上俄文"，不是官方译名；发现译错的，往 `dict.ts` 里加一行即可。
 
-```bash
-npm install
-npm run dev
-```
-
-生产构建：
+## 构建离线包
 
 ```bash
+npm ci
+npm run data      # 下载并截取莫斯科州、生成搜索索引、切块（需要能访问 build.protomaps.com）
 npm run build
 ```
 
-## 设计原则
+或者直接在 GitHub 上运行 **Actions → Build Moscow Oblast Offline APK**，产物是可以直接安装的 APK。范围（`bbox`）和最大级别（`maxzoom`）可以在手动运行时改；`maxzoom` 从 14 降到 13 能明显减小体积。
 
-名称优先级计划为：OSM/Wikidata 已验证中文名 → RussiaCNMap 人工别名库 → 俄文原名。机器翻译或音译只作为本项目自己的覆盖层，不自动写回 OpenStreetMap。
+## 没有网络/没有数据时调试界面
 
-## 下一阶段
+```bash
+npm run fixture   # 生成一个只有几条街、几个站的假数据（public/moscow-oblast.pmtiles）
+npm run dev
+```
 
-1. 对矢量瓦片中的地名做 `name:zh-Hans → name:zh → name:ru` 中文优先渲染。
-2. 将搜索服务抽成可切换 provider，避免公共 Nominatim 承担生产流量。
-3. 接入 Wikidata 中文名称并建立人工审核的数据管线。
-4. 增加地铁、机场、大学、景点等面向中国用户的 POI 分类。
-5. 后续接 Valhalla 路线规划。
+## 为什么数据要切成小块
+
+Android WebView 里 Capacitor 的本地服务器对 HTTP Range 请求的实现有问题（返回的是从头开始的整个文件），
+而 PMTiles 依赖 Range。所以正式包把 `.pmtiles` 切成 4MB 的小文件（`public/data/`），
+`src/pm-source.ts` 用普通请求整块读取并做 LRU 缓存。网页部署也因此不需要服务器支持 Range。
+
+## 目录
+
+- `src/zh/` 汉语地名：`dict.ts` 词典、`translit.ts` 俄→汉音译、`index.ts` 规则；`npm run test:zh` 回归测试
+- `src/tile-zh.ts` 瓦片解码 → 补汉语名 → 重新编码
+- `src/style.ts` 底图样式（Protomaps 图层 + 汉语优先标注）
+- `scripts/` 数据构建（`build-data.sh`、`build-index.mjs`、`split-chunks.mjs`、`make-fixture.mjs`）
 
 ## 数据与许可
 
-地图数据来自 OpenStreetMap，使用时必须遵守 ODbL 及署名要求。当前演示底图使用 OpenFreeMap 服务；正式部署前应确认服务政策或部署自己的瓦片服务。代码许可见 LICENSE。
+地图数据来自 OpenStreetMap（ODbL，需署名，地图右下角已带），底图瓦片由 Protomaps 每日构建。代码许可见 LICENSE。
