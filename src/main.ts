@@ -10,6 +10,7 @@ import { loadIndex, search, indexSize, kindLabel, type Hit } from "./services/se
 import { toZh } from "./zh/index";
 import { toEn } from "./en/index";
 import { NavUI } from "./nav/ui";
+import { MetroMap } from "./nav/metro-map";
 import { UI, t as tr, type Lang } from "./nav/i18n";
 import { MODES, applyLabelMode, nameLayerIds, type LabelMode } from "./labels";
 
@@ -69,6 +70,10 @@ const nav = new NavUI({
   onPanel: (open) => { if (open) card.hidden = true; else if (current) showPlace(current.names, current.kind, current.at, false); },
 });
 nav.wire();
+const metroMap = new MetroMap({
+  map, getLang: navLang, load: () => nav.metroData(),
+  onStation: (s, lang) => showPlace({ zh: s.zh || s.ru, en: s.en || s.ru, ru: s.ru }, 3, [s.lon, s.lat], false),
+});
 
 // —— 标注语言切换（不重新加载瓦片，直接改样式）
 let labelIds: string[] = [];
@@ -82,7 +87,7 @@ langs.addEventListener("click", (e) => {
   try { localStorage.setItem(STORE, mode); } catch { /* ignore */ }
   markMode(); applyLabelMode(map, mode, labelIds);
   renderResults(); // 结果列表的主语言也跟着变
-  nav.refresh();
+  nav.refresh(); metroMap.refresh();
   if (current) showPlace(current.names, current.kind, current.at, false);
 });
 markMode();
@@ -171,6 +176,7 @@ const KIND_IDX: Record<string, number> = {
 map.on("click", (e) => {
   if (nav.isPicking()) { nav.pick(e.lngLat.lng, e.lngLat.lat); return; }
   if (nav.isActive()) return;
+  if (map.getLayer("metro-station") && map.getLayoutProperty("metro-station", "visibility") !== "none" && map.queryRenderedFeatures([[e.point.x - 10, e.point.y - 10], [e.point.x + 10, e.point.y + 10]], { layers: ["metro-station"] }).length) return;
   results.hidden = true; input.blur();
   const r = 8;
   const feats = map.queryRenderedFeatures([[e.point.x - r, e.point.y - r], [e.point.x + r, e.point.y + r]])

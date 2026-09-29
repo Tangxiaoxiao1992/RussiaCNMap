@@ -67,6 +67,15 @@ assert.ok(txt.includes("Line 1") || txt.includes("Sokol"), "应列出线路/站�
 await page.click(".route .go"); await page.waitForTimeout(400);
 console.log("地铁导航横幅:", (await page.textContent(".navtop")).replace(/\s+/g, " "));
 await page.screenshot({ path: S + "/5-metro-nav.png" });
+// 5) 地铁线路图
+await page.click("#metrobtn, .metrobtn"); await page.waitForSelector(".lines .lbtn", { timeout: 10000 });
+console.log("线路列表:", (await page.textContent(".lines")).replace(/\s+/g, " "));
+await page.waitForTimeout(1500); await page.screenshot({ path: S + "/6-metro-map.png" });
+await page.click('.lines .lbtn[data-line="0"]'); await page.waitForTimeout(1200);
+console.log("线路站点:", (await page.textContent(".lines")).replace(/\s+/g, " "));
+await page.screenshot({ path: S + "/7-metro-line.png" });
+await page.click('.lines .lbtn[data-st]'); await page.waitForTimeout(800);
+console.log("点站名后卡片:", (await page.textContent("#card")).replace(/\s+/g, " ").slice(0, 120));
 console.log("外部请求:", external.length, "错误:", errs.slice(0, 5));
 assert.equal(external.length, 0); assert.equal(errs.length, 0);
 console.log("导航端到端：通过");

@@ -1,4 +1,6 @@
 import { Marker } from "maplibre-gl";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 import type { Map as MapLibre, GeoJSONSource } from "maplibre-gl";
 import { loadNav, type NavData } from "./load.ts";
 import { metroGuide, progress, walkGuide, stationName, type Guide } from "./guide.ts";
@@ -70,17 +72,33 @@ export class NavUI {
   isActive() { return this.navigating || !this.panel.hidden; }
 
   // ————— 定位（离线可用，靠手机 GPS）
+  private watching = false;
   locate(center: boolean) {
-    if (!("geolocation" in navigator)) return;
-    if (this.watchId === undefined) {
-      this.watchId = navigator.geolocation.watchPosition(
-        (p) => this.feed({ lon: p.coords.longitude, lat: p.coords.latitude, heading: p.coords.heading, speed: p.coords.speed, accuracy: p.coords.accuracy }),
-        (err) => console.warn("定位失败", err.message),
-        { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
-      );
+    if (!this.watching) {
+      this.watching = true;
+      const onPos = (c: { longitude: number; latitude: number; heading?: number | null; speed?: number | null; accuracy?: number }, ts?: number) => {
+        if (ts && Date.now() - ts > 15000) return; // 丢弃过期的缓存定位
+        this.feed({ lon: c.longitude, lat: c.latitude, heading: c.heading, speed: c.speed, accuracy: c.accuracy });
+      };
+      if (Capacitor.isNativePlatform()) {
+        // 用系统的融合定位（GPS + 网络），比 WebView 自带的 geolocation 准，也会正确弹出权限申请
+        void (async () => {
+          try { await Geolocation.requestPermissions(); } catch { /* 用户拒绝时下面会报错 */ }
+          try {
+            await Geolocation.watchPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }, (pos, err) => {
+              if (err || !pos) { console.warn("定位失败", err); return; }
+              onPos(pos.coords, pos.timestamp);
+            });
+          } catch (e) { console.warn("定位失败", e); this.watching = false; }
+        })();
+      } else if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition((p) => onPos(p.coords, p.timestamp), (err) => console.warn("定位失败", err.message), { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+      }
     }
     if (center && this.lastFix) this.map.flyTo({ center: [this.lastFix.lon, this.lastFix.lat], zoom: Math.max(this.map.getZoom(), 15), essential: true });
+    else if (center) this.wantCenter = true;
   }
+  private wantCenter = false;
 
   private onOrient(e: DeviceOrientationEvent) {
     if (e.absolute && typeof e.alpha === "number") { this.compass = (360 - e.alpha) % 360; this.updateDot(); }
@@ -114,6 +132,7 @@ export class NavUI {
       if (dt > 0.5) { const dx = (f.lon - this.lastFix.lon) * 111320 * Math.cos((f.lat * Math.PI) / 180), dy = (f.lat - this.lastFix.lat) * 110540; f.speed = Math.hypot(dx, dy) / dt; }
     }
     this.lastFix = f; this.lastFixAt = now;
+    if (this.wantCenter) { this.wantCenter = false; this.map.flyTo({ center: [f.lon, f.lat], zoom: Math.max(this.map.getZoom(), 15), essential: true }); }
     if (typeof f.speed === "number" && f.speed > 0.4) this.emaSpeed = this.emaSpeed ? this.emaSpeed * 0.8 + f.speed * 0.2 : f.speed;
     this.updateDot();
     if (!this.panel.hidden && this.dest && !this.origin && !this.busy) { this.origin = { lon: f.lon, lat: f.lat, gps: true }; void this.plan(); }
@@ -143,6 +162,8 @@ export class NavUI {
   }
 
   // ————— 路线规划
+  /** 地铁线路数据（线路图用）；没有导航数据时为 null */
+  async metroData() { const n = await this.navData(); return n?.metro?.data ?? null; }
   private navData() { return (this.data ??= loadNav(this.o.navDir)); }
 
   open(dest: Dest) {
@@ -222,7 +243,8 @@ export class NavUI {
     if (this.panel.hidden || !this.dest) return;
     const L = this.lang;
     const now = Date.now();
-    const from = this.origin ? (this.origin.gps ? t(UI.myPos, L) : `${this.origin.lat.toFixed(4)}, ${this.origin.lon.toFixed(4)}`) : "—";
+    const acc = this.origin?.gps && this.lastFix?.accuracy ? ` ±${Math.round(this.lastFix.accuracy)}m` : "";
+    const from = this.origin ? (this.origin.gps ? t(UI.myPos, L) + acc : `${this.origin.lat.toFixed(4)}, ${this.origin.lon.toFixed(4)}`) : "—";
     const opts = this.options.map((x) => {
       const on = x.id === this.chosen;
       const title = x.id === "walk" ? "🚶 " + t(UI.walk, L) : "🚇 " + t(UI.metro, L);

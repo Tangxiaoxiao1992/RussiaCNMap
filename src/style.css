@@ -61,3 +61,7 @@
 .me .cone{position:absolute;left:-19px;top:-19px;width:60px;height:60px;background:radial-gradient(circle at 50% 50%,#1a73e866 0,#1a73e800 70%);clip-path:polygon(50% 50%,15% 0,85% 0)}
 body:has(.navtop:not([hidden])) .top{display:none}
 body:has(.navbar:not([hidden])) .maplibregl-ctrl-bottom-right{bottom:72px}
+.metrobtn{top:calc(46% + 54px);font-size:22px}
+.route.lines{max-height:55vh}
+.route .lbtn{width:100%;background:none;border:0;border-top:1px solid #f0f2f4;text-align:left;font-size:15px}
+.route .back{border:0;background:none;color:#1a73e8;font-size:16px;padding:0 6px 0 0}
