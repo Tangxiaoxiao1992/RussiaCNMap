@@ -1,5 +1,5 @@
 import {Map,Marker,NavigationControl,GeolocateControl,type StyleSpecification} from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css"; import "./style.css"; import {searchPlaces,type SearchResult} from "./services/search";
+import "maplibre-gl/dist/maplibre-gl.css"; import "./style.css"; import {searchPlaces,type SearchResult} from "./services/search"; import {labelTranslations} from "./data/aliases";
 const app=document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML=`<main class="shell"><header><div class="brand"><strong>俄罗斯中文地图</strong><span>RussiaCNMap · 开源预览版</span></div><form id="search"><input id="q" autocomplete="off" placeholder="搜索中文 / 俄文 / 英文，例如：莫航、红场、SVO"/><button>搜索</button></form><div id="results" class="results"></div></header><div id="map"></div><aside id="card" class="card hidden"></aside><footer>中文优先 · 俄文兜底 · 数据源 OpenStreetMap</footer></main>`;
 const STYLE_URL="https://tiles.openfreemap.org/styles/liberty";
@@ -11,7 +11,7 @@ function localizeMapLabels(){
   if(layer.type!=="symbol"||!layer.layout||!("text-field" in layer.layout))continue;
   const field=(layer.layout as Record<string,unknown>)["text-field"];
   if(field===undefined)continue;
-  try{map.setLayoutProperty(layer.id,"text-field",["coalesce",["get","name:zh-Hans"],["get","name:zh"],["get","name:ru"],["get","name"],field]);}catch{}
+  const pairs=Object.entries(labelTranslations).flatMap(([ru,zh])=>[ru,zh]);\n  const translated=["match",["coalesce",["get","name:ru"],["get","name"]],...pairs,""] as unknown[];\n  try{map.setLayoutProperty(layer.id,"text-field",["coalesce",["get","name:zh-Hans"],["get","name:zh"],translated,["get","name:ru"],["get","name"],field]);}catch{}
  }
 }
 map.on("style.load",localizeMapLabels);
