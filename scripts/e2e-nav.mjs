@@ -28,6 +28,34 @@ assert.ok(!(await page.textContent(".accbadge")).includes("✎"), "点徽标应�
 const back = await page.evaluate(() => window.__nav.lastFix);
 assert.ok(Math.abs(back.lon - 37.6002) < 0.0005, "清除后应回到 GPS 读数");
 console.log("手动校正：通过");
+// 定位设置面板：① 手动定位（点地图）
+await page.click("#netbtn"); await page.waitForSelector(".locmenu [data-a=manual]");
+await page.click(".locmenu [data-a=manual]"); await page.waitForTimeout(300);
+assert.ok(await page.evaluate(() => window.__nav.isPicking()), "应进入选点状态");
+await page.mouse.click(250, 400); await page.waitForTimeout(500);
+const m1 = await page.evaluate(() => window.__nav.lastFix);
+assert.ok(Math.abs(m1.lon - 37.6002) > 0.001, "手动定位后蓝点应移动：" + JSON.stringify(m1));
+// ② 地铁站定位：搜"sokol" → 点击 → 固定在站上
+await page.click(".locmenu [data-a=station]"); await page.fill("#stq", "sokol"); await page.waitForTimeout(500);
+await page.click("#stlist [data-st]"); await page.waitForTimeout(500);
+const m2 = await page.evaluate(() => window.__nav.lastFix);
+assert.ok(Math.abs(m2.lon - 37.60) < 0.0005 && Math.abs(m2.lat - 55.75) < 0.0005, "应固定在 Sokol 站：" + JSON.stringify(m2));
+assert.ok((await page.textContent(".accbadge")).includes("📌"), "徽标应显示 📌");
+// 此时来了一个很差的 GPS 读数，位置应保持不动
+await page.evaluate(() => window.__nav.feed({ lon: 37.63, lat: 55.78, accuracy: 300 }));
+const m3 = await page.evaluate(() => window.__nav.lastFix);
+assert.ok(Math.abs(m3.lon - 37.60) < 0.0005, "固定期间差读数不应移动蓝点");
+// ③ 抗干扰模式开关 + 清除
+await page.click("#netbtn"); await page.click(".locmenu [data-a=net]"); await page.waitForTimeout(300);
+assert.ok((await page.textContent(".locmenu")).includes("ON"), "抗干扰模式应为 ON");
+await page.click(".locmenu [data-a=net]"); await page.waitForTimeout(300);
+assert.ok((await page.textContent(".locmenu")).includes("OFF"));
+await page.click(".locmenu [data-a=clear]"); await page.waitForTimeout(300);
+await page.click(".locmenu .close"); await page.waitForTimeout(200);
+await page.evaluate(() => window.__nav.feed({ lon: 37.6002, lat: 55.7402, accuracy: 10 }));
+const m4 = await page.evaluate(() => window.__nav.lastFix);
+assert.ok(Math.abs(m4.lon - 37.6002) < 0.0005, "清除后应恢复 GPS 读数");
+console.log("定位设置（手动/地铁站/抗干扰）：通过");
 
 // 1) 步行：搜索"红场" → 路线
 await page.fill("#q", "Red Square"); await page.waitForTimeout(400);

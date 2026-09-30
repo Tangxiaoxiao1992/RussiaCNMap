@@ -38,6 +38,7 @@ export class NavUI {
   private message = "";
   private busy = false;
   private picking = false;
+  private pickMode: "start" | "me" = "start";
   private lastFix: Fix | undefined;
   private watchId: number | undefined;
   private me: Marker | undefined; private cone: HTMLElement | undefined;
@@ -63,9 +64,13 @@ export class NavUI {
     btn.addEventListener("click", () => this.locate(true));
     document.getElementById("app")!.appendChild(btn);
     const nb = document.createElement("button");
-    nb.id = "netbtn"; nb.className = "locate netbtn" + (this.netMode ? " on" : ""); nb.type = "button"; nb.setAttribute("aria-label", "抗干扰定位 / Anti-jamming location"); nb.textContent = "📶";
-    nb.addEventListener("click", () => void this.toggleNetMode());
+    nb.id = "netbtn"; nb.className = "locate netbtn"; nb.type = "button"; nb.setAttribute("aria-label", "定位设置 / Location settings"); nb.textContent = "📍";
+    nb.addEventListener("click", () => this.openLocMenu());
     document.getElementById("app")!.appendChild(nb);
+    this.locMenu = document.createElement("div"); this.locMenu.className = "route locmenu"; this.locMenu.hidden = true;
+    document.getElementById("app")!.appendChild(this.locMenu);
+    this.locMenu.addEventListener("click", (e) => this.onLocMenu(e));
+    this.locMenu.addEventListener("input", (e) => { if ((e.target as HTMLElement).id === "stq") this.renderStations((e.target as HTMLInputElement).value); });
     this.map.on("dragstart", () => { if (this.navigating && this.follow) { this.follow = false; this.renderBar(); } });
     if (this.map.loaded()) this.ensureLayers(); else this.map.once("load", () => this.ensureLayers());
     window.addEventListener("deviceorientationabsolute", (e) => this.onOrient(e as DeviceOrientationEvent));
@@ -74,7 +79,7 @@ export class NavUI {
 
   get lang(): Lang { return this.o.getLang(); }
   isPicking() { return this.picking; }
-  isActive() { return this.navigating || !this.panel.hidden; }
+  isActive() { return this.navigating || !this.panel.hidden || !this.locMenu.hidden; }
 
   // ————— 定位（离线可用，靠手机 GPS）
   private watching = false;
@@ -116,7 +121,6 @@ export class NavUI {
     this.netMode = !this.netMode;
     try { localStorage.setItem("russiacnmap.netMode", this.netMode ? "1" : "0"); } catch { /* ignore */ }
     this.prevRaw = undefined; this.pendingJump = undefined;
-    document.getElementById("netbtn")?.classList.toggle("on", this.netMode);
     this.toast(t(this.netMode ? UI.netOn : UI.netOff, this.lang));
     if (this.watching) { await this.stopWatch(); this.startWatch(); }
   }
@@ -172,9 +176,9 @@ export class NavUI {
   private showAccuracy(f: Fix) {
     if (!this.badge) { this.badge = document.createElement("div"); this.badge.className = "accbadge"; this.badge.addEventListener("click", () => this.clearManual()); document.getElementById("app")!.appendChild(this.badge); }
     const a = f.accuracy;
-    if (a && a > 100 && !this.offset && Date.now() - this.tipAt > 10 * 60000) this.showTip();
-    const corrected = !!this.offset;
-    this.badge.textContent = (corrected ? "✎ " : "") + (a ? `±${Math.round(a)}m` : "") + (corrected ? " ✕" : a && a > 100 ? " ?" : "");
+    if (a && a > 100 && !this.offset && !this.pin && Date.now() - this.tipAt > 10 * 60000) this.showTip();
+    const corrected = !!this.offset || !!this.pin;
+    this.badge.textContent = (this.pin ? "📌 " : corrected ? "✎ " : "") + (a ? `±${Math.round(a)}m` : "") + (corrected ? " ✕" : a && a > 100 ? " ?" : "");
     this.badge.style.pointerEvents = corrected ? "auto" : "none";
     this.badge.style.color = !a ? "#52606d" : a <= 30 ? "#1b7f3b" : a <= 100 ? "#b26a00" : "#c0341d";
     const src = this.map.getSource("me-acc") as GeoJSONSource | undefined;
@@ -206,6 +210,11 @@ export class NavUI {
     this.raw = { lon: f.lon, lat: f.lat };
     if (this.offset && now - this.offset.at < 15 * 60000) f = { ...f, lon: f.lon + this.offset.dx, lat: f.lat + this.offset.dy };
     else if (this.offset) { this.offset = undefined; }
+    // 地铁站定位：站里 GPS 不可用，先固定在所选站；出站后拿到高精度读数（≤20 米）就自动放开
+    if (this.pin) {
+      if (f.accuracy && f.accuracy <= 20 && now - this.pin.at > 20000) this.pin = undefined;
+      else f = { ...f, lon: this.pin.lon, lat: this.pin.lat, accuracy: 30, speed: 0 };
+    }
     // 精度很差的点（多半是基站/缓存定位）不要覆盖刚拿到的好定位
     if (f.accuracy && f.accuracy > 150 && this.lastFix && now - this.lastFixAt < 20000 && (this.lastFix.accuracy ?? 999) < f.accuracy) return;
     if (this.lastFix && typeof f.speed !== "number") {
@@ -261,13 +270,19 @@ export class NavUI {
 
   close() {
     this.stop(true);
-    this.panel.hidden = true; this.picking = false; this.hint.hidden = true;
+    this.panel.hidden = true; this.picking = false; this.pickMode = "start"; this.hint.hidden = true;
     this.setRouteData(undefined);
     this.options = []; this.o.onPanel(false);
   }
 
   /** 地图点击：选择起点 */
   pick(lon: number, lat: number) {
+    if (this.pickMode === "me") {
+      this.picking = false; this.hint.hidden = true; this.pickMode = "start";
+      this.setManual(lon, lat);
+      this.openLocMenu();
+      return;
+    }
     this.picking = false; this.hint.hidden = true; this.panel.hidden = false;
     this.origin = { lon, lat, gps: false };
     this.render(); void this.plan();
@@ -368,7 +383,7 @@ export class NavUI {
     if (b.dataset.opt) { this.chosen = b.dataset.opt as Option["id"]; this.userPicked = true; this.showChosen(true); return; }
     switch (b.dataset.act) {
       case "close": this.close(); break;
-      case "pick": this.picking = true; this.panel.hidden = true; this.hint.hidden = false; this.hint.textContent = t(UI.pickStart, this.lang); break;
+      case "pick": this.pickMode = "start"; this.picking = true; this.panel.hidden = true; this.hint.hidden = false; this.hint.textContent = t(UI.pickStart, this.lang); break;
       case "go": this.start(); break;
     }
   }
@@ -510,6 +525,7 @@ export class NavUI {
   // ————— 手动校正：GPS 被干扰时，长按地图告诉 App "我在这里"
   private raw: { lon: number; lat: number } | undefined;
   private offset: { dx: number; dy: number; at: number } | undefined;
+  private pin: { lon: number; lat: number; at: number } | undefined;
   private manualBar: HTMLElement | undefined;
   private manualAt = 0;
 
@@ -549,13 +565,75 @@ export class NavUI {
     if (this.dest && !this.panel.hidden) void this.plan();
   }
 
-  clearManual() { this.offset = undefined; if (this.raw) this.feed({ ...this.raw, accuracy: this.lastFix?.accuracy }); }
+  clearManual() { this.offset = undefined; this.pin = undefined; if (this.raw) this.feed({ ...this.raw, accuracy: this.lastFix?.accuracy }); }
+
+  // ————— 定位设置面板：手动定位 / 地铁站定位 / 抗干扰模式
+  private locMenu!: HTMLElement;
+  private stations: import("./metro-types.ts").Station[] | null | undefined;
+
+  openLocMenu() {
+    this.panel.hidden = true; this.picking = false; this.hint.hidden = true;
+    this.locMenu.hidden = false;
+    this.renderLocMenu();
+  }
+  closeLocMenu() { this.locMenu.hidden = true; }
+
+  private renderLocMenu(stationsOpen = false) {
+    const L = this.lang, f = this.lastFix;
+    const status = f ? `${f.accuracy ? "±" + Math.round(f.accuracy) + " m" : ""}${this.pin ? " · 📌" : this.offset ? " · ✎" : ""}` : t(UI.noFixYet, L);
+    this.locMenu.innerHTML = `<button class="close" data-a="close" aria-label="${esc(t(UI.close, L))}">×</button>
+      <h3>📍 ${esc(t(UI.locSettings, L))}</h3>
+      <p class="note" style="text-align:left">${esc(t(UI.locNow, L))}：${esc(status)}</p>
+      <button class="leg lbtn" data-a="manual"><i class="ic">✋</i><div><b>${esc(t(UI.locManual, L))}</b><br><small>${esc(t(UI.locManualHint, L))}</small></div></button>
+      <button class="leg lbtn" data-a="station"><i class="ic">🚇</i><div><b>${esc(t(UI.locStation, L))}</b><br><small>${esc(t(UI.locStationHint, L))}</small></div></button>
+      ${stationsOpen ? `<input id="stq" class="stq" type="search" placeholder="${esc(t(UI.locStationSearch, L))}" autocomplete="off" /><div id="stlist"></div>` : ""}
+      <button class="leg lbtn" data-a="net"><i class="ic">📶</i><div><b>${esc(t(UI.locNet, L))}</b> <span class="sw ${this.netMode ? "on" : ""}">${this.netMode ? "ON" : "OFF"}</span><br><small>${esc(t(UI.locNetHint, L))}</small></div></button>
+      ${this.offset || this.pin ? `<button class="leg lbtn" data-a="clear"><i class="ic">✕</i><div><b>${esc(t(UI.locClear, L))}</b></div></button>` : ""}`;
+    if (stationsOpen) { this.renderStations(""); (document.getElementById("stq") as HTMLInputElement | null)?.focus(); }
+  }
+
+  private async renderStations(q: string) {
+    const box = document.getElementById("stlist");
+    if (!box) return;
+    if (this.stations === undefined) { box.textContent = t(UI.loading, this.lang); this.stations = (await this.metroData())?.stations ?? null; }
+    if (!this.stations) { box.textContent = t(UI.noMetro, this.lang); return; }
+    const norm = (x: string) => x.toLowerCase().replace(/ё/g, "е").replace(/[\s\-·.]/g, "");
+    const n = norm(q), L = this.lang;
+    const list = this.stations.map((s, i) => ({ s, i })).filter(({ s }) => !n || [s.zh, s.en, s.ru].some((x) => x && norm(x).includes(n))).slice(0, 40);
+    box.innerHTML = list.map(({ s, i }) => `<button class="leg lbtn" data-st="${i}"><i class="ic">🚉</i><div><b>${esc(stationName(s, L))}</b><br><small>${esc([s.zh, s.en, s.ru].filter((x) => x && x !== stationName(s, L)).join(" · "))}</small></div></button>`).join("") || `<p class="msg">${esc(t(UI.noRoute, L))}</p>`;
+  }
+
+  private onLocMenu(e: Event) {
+    const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+    if (!b) return;
+    if (b.dataset.st !== undefined && this.stations) {
+      const s = this.stations[Number(b.dataset.st)];
+      this.pin = { lon: s.lon, lat: s.lat, at: Date.now() };
+      this.offset = undefined;
+      this.feed({ lon: this.raw?.lon ?? s.lon, lat: this.raw?.lat ?? s.lat, accuracy: 30 });
+      if (!this.raw) { this.lastFix = { lon: s.lon, lat: s.lat, accuracy: 30 }; this.updateDot(); }
+      this.map.easeTo({ center: [s.lon, s.lat], zoom: Math.max(this.map.getZoom(), 15.5), duration: 400 });
+      this.toast(`📌 ${stationName(s, this.lang)}`);
+      this.closeLocMenu();
+      return;
+    }
+    switch (b.dataset.a) {
+      case "close": this.closeLocMenu(); break;
+      case "manual":
+        this.closeLocMenu(); this.picking = true; this.pickMode = "me"; this.hint.hidden = false; this.hint.textContent = t(UI.locManualHint, this.lang);
+        break;
+      case "station": this.renderLocMenu(true); break;
+      case "net": void this.toggleNetMode().then(() => this.renderLocMenu()); break;
+      case "clear": this.clearManual(); this.renderLocMenu(); break;
+    }
+  }
 
   /** 语言切换后刷新界面文字 */
   refresh() {
     if (this.navigating) { this.renderBar(); this.renderBanner(this.lastProg); }
     if (!this.panel.hidden) this.render();
-    if (!this.hint.hidden) this.hint.textContent = t(UI.pickStart, this.lang);
+    if (!this.hint.hidden) this.hint.textContent = t(this.pickMode === "me" ? UI.locManualHint : UI.pickStart, this.lang);
+    if (!this.locMenu.hidden) this.renderLocMenu();
   }
 
   wire() {
