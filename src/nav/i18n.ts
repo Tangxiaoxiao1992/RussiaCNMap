@@ -99,6 +99,8 @@ export const UI = {
   stopsWord: (n: number, lang: Lang) => pick(lang, `${n}站`, `${n} stop${n > 1 ? "s" : ""}`, `${n} ост.`),
   voiceOn: { zh: "语音开", en: "Voice on", ru: "Голос вкл." },
   voiceOff: { zh: "语音关", en: "Voice off", ru: "Голос выкл." },
+  manualAsk: { zh: "定位不准？把当前位置设在这里", en: "GPS off? Set my position here", ru: "GPS врёт? Поставить меня сюда" },
+  manualHere: { zh: "我在这里", en: "I'm here", ru: "Я здесь" },
   close: { zh: "关闭", en: "Close", ru: "Закрыть" },
 } as const;
 

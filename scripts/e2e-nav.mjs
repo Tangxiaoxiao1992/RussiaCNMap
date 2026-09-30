@@ -17,6 +17,17 @@ await page.waitForFunction(() => window.__map && window.__map.loaded(), null, { 
 await page.evaluate(() => window.__map.jumpTo({ center: [37.61, 55.745], zoom: 14 }));
 await page.click("#locate"); await page.waitForTimeout(1200);
 assert.ok(await page.$(".me"), "应出现定位小蓝点");
+// 手动校正：右键/长按地图 → "我在这里" → 蓝点移过去；点徽标清除
+await page.mouse.click(300, 300, { button: "right" }); await page.waitForSelector(".manualbar button[data-a=ok]", { timeout: 5000 });
+await page.click(".manualbar button[data-a=ok]"); await page.waitForTimeout(600);
+assert.ok((await page.textContent(".accbadge")).includes("✎"), "应显示已校正标记");
+const moved = await page.evaluate(() => window.__nav.lastFix);
+assert.ok(Math.abs(moved.lon - 37.6002) > 0.001, "蓝点应移到长按位置附近：" + JSON.stringify(moved));
+await page.click(".accbadge"); await page.waitForTimeout(400);
+assert.ok(!(await page.textContent(".accbadge")).includes("✎"), "点徽标应清除校正");
+const back = await page.evaluate(() => window.__nav.lastFix);
+assert.ok(Math.abs(back.lon - 37.6002) < 0.0005, "清除后应回到 GPS 读数");
+console.log("手动校正：通过");
 
 // 1) 步行：搜索"红场" → 路线
 await page.fill("#q", "Red Square"); await page.waitForTimeout(400);

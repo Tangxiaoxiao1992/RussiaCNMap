@@ -70,6 +70,7 @@ const nav = new NavUI({
   onPanel: (open) => { if (open) card.hidden = true; else if (current) showPlace(current.names, current.kind, current.at, false); },
 });
 nav.wire();
+nav.enableManualFix();
 const metroMap = new MetroMap({
   map, getLang: navLang, load: () => nav.metroData(),
   onStation: (s, lang) => showPlace({ zh: s.zh || s.ru, en: s.en || s.ru, ru: s.ru }, 3, [s.lon, s.lat], false),

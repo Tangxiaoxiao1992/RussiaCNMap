@@ -4,6 +4,7 @@ import { Geolocation } from "@capacitor/geolocation";
 import type { Map as MapLibre, GeoJSONSource } from "maplibre-gl";
 import { loadNav, type NavData } from "./load.ts";
 import { metroGuide, progress, walkGuide, stationName, type Guide } from "./guide.ts";
+import { dist } from "./geo.ts";
 import { SPEECH_LANG, UI, fmtClock, fmtDist, fmtTime, t, type Lang } from "./i18n.ts";
 import type { MetroPlan } from "./metro.ts";
 import type { Path } from "./graph.ts";
@@ -78,6 +79,7 @@ export class NavUI {
       this.watching = true;
       const onPos = (c: { longitude: number; latitude: number; heading?: number | null; speed?: number | null; accuracy?: number }, ts?: number) => {
         if (ts && Date.now() - ts > 15000) return; // 丢弃过期的缓存定位
+        if (this.isJump(c.longitude, c.latitude)) return; // 瞬间跳几百米的点（干扰/欺骗/基站切换），要连续两次一致才采信
         this.feed({ lon: c.longitude, lat: c.latitude, heading: c.heading, speed: c.speed, accuracy: c.accuracy });
       };
       if (Capacitor.isNativePlatform()) {
@@ -100,6 +102,19 @@ export class NavUI {
   }
   private wantCenter = false;
 
+  private prevRaw: { lon: number; lat: number; at: number } | undefined;
+  private pendingJump: { lon: number; lat: number } | undefined;
+  private isJump(lon: number, lat: number): boolean {
+    const now = Date.now(), p = this.prevRaw;
+    const accept = () => { this.prevRaw = { lon, lat, at: now }; this.pendingJump = undefined; return false; };
+    if (!p) return accept();
+    const dt = (now - p.at) / 1000, d = dist(p.lon, p.lat, lon, lat);
+    if (dt > 30 || d <= 40 + 12 * dt) return accept();
+    if (this.pendingJump && dist(this.pendingJump.lon, this.pendingJump.lat, lon, lat) < 80) return accept();
+    this.pendingJump = { lon, lat };
+    return true;
+  }
+
   private onOrient(e: DeviceOrientationEvent) {
     if (e.absolute && typeof e.alpha === "number") { this.compass = (360 - e.alpha) % 360; this.updateDot(); }
   }
@@ -112,9 +127,11 @@ export class NavUI {
 
   private badge: HTMLElement | undefined;
   private showAccuracy(f: Fix) {
-    if (!this.badge) { this.badge = document.createElement("div"); this.badge.className = "accbadge"; document.getElementById("app")!.appendChild(this.badge); }
+    if (!this.badge) { this.badge = document.createElement("div"); this.badge.className = "accbadge"; this.badge.addEventListener("click", () => this.clearManual()); document.getElementById("app")!.appendChild(this.badge); }
     const a = f.accuracy;
-    this.badge.textContent = a ? `±${Math.round(a)}m` : "";
+    const corrected = !!this.offset;
+    this.badge.textContent = (corrected ? "✎ " : "") + (a ? `±${Math.round(a)}m` : "") + (corrected ? " ✕" : a && a > 100 ? " ?" : "");
+    this.badge.style.pointerEvents = corrected ? "auto" : "none";
     this.badge.style.color = !a ? "#52606d" : a <= 30 ? "#1b7f3b" : a <= 100 ? "#b26a00" : "#c0341d";
     const src = this.map.getSource("me-acc") as GeoJSONSource | undefined;
     if (src && a) {
@@ -142,6 +159,9 @@ export class NavUI {
   /** 收到一个定位点（真实 GPS 或测试注入） */
   feed(f: Fix) {
     const now = Date.now();
+    this.raw = { lon: f.lon, lat: f.lat };
+    if (this.offset && now - this.offset.at < 15 * 60000) f = { ...f, lon: f.lon + this.offset.dx, lat: f.lat + this.offset.dy };
+    else if (this.offset) { this.offset = undefined; }
     // 精度很差的点（多半是基站/缓存定位）不要覆盖刚拿到的好定位
     if (f.accuracy && f.accuracy > 150 && this.lastFix && now - this.lastFixAt < 20000 && (this.lastFix.accuracy ?? 999) < f.accuracy) return;
     if (this.lastFix && typeof f.speed !== "number") {
@@ -442,6 +462,50 @@ export class NavUI {
       s.speak(u);
     } catch { /* 语音不可用就静默 */ }
   }
+
+  // ————— 手动校正：GPS 被干扰时，长按地图告诉 App "我在这里"
+  private raw: { lon: number; lat: number } | undefined;
+  private offset: { dx: number; dy: number; at: number } | undefined;
+  private manualBar: HTMLElement | undefined;
+  private manualAt = 0;
+
+  /** 由 main 在地图初始化后调用：长按地图弹出"我在这里" */
+  enableManualFix() {
+    let timer: number | undefined;
+    const cancel = () => { clearTimeout(timer); timer = undefined; };
+    this.map.on("touchstart", (e) => { cancel(); if (e.points && e.points.length > 1) return; timer = window.setTimeout(() => this.askManual(e.lngLat.lng, e.lngLat.lat), 650); });
+    for (const ev of ["touchmove", "touchend", "touchcancel", "dragstart", "zoomstart", "rotatestart"] as const) this.map.on(ev as "touchmove", cancel);
+    this.map.on("contextmenu", (e) => this.askManual(e.lngLat.lng, e.lngLat.lat));
+  }
+
+  private askManual(lon: number, lat: number) {
+    if (this.picking || Date.now() - this.manualAt < 1200) return;
+    this.manualAt = Date.now();
+    const L = this.lang;
+    if (!this.manualBar) { this.manualBar = document.createElement("div"); this.manualBar.className = "manualbar"; document.getElementById("app")!.appendChild(this.manualBar); }
+    const bar = this.manualBar;
+    bar.hidden = false;
+    bar.innerHTML = `<span>${esc(t(UI.manualAsk, L))}</span><button data-a="ok">${esc(t(UI.manualHere, L))}</button><button data-a="no" class="ghost">${esc(t(UI.close, L))}</button>`;
+    bar.onclick = (e) => {
+      const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+      if (!b) return;
+      bar.hidden = true;
+      if (b.dataset.a === "ok") this.setManual(lon, lat);
+    };
+  }
+
+  private setManual(lon: number, lat: number) {
+    const r = this.raw;
+    // 记下"真实位置 − GPS 读数"的偏差，之后的 GPS 读数都加上它（15 分钟内有效）
+    this.offset = r ? { dx: lon - r.lon, dy: lat - r.lat, at: Date.now() } : undefined;
+    this.feed({ lon: r ? r.lon : lon, lat: r ? r.lat : lat, accuracy: 20 });
+    if (!r) { this.lastFix = { lon, lat, accuracy: 20 }; this.updateDot(); }
+    this.map.easeTo({ center: [lon, lat], duration: 400 });
+    this.origin = this.origin?.gps ? { lon, lat, gps: true } : this.origin;
+    if (this.dest && !this.panel.hidden) void this.plan();
+  }
+
+  clearManual() { this.offset = undefined; if (this.raw) this.feed({ ...this.raw, accuracy: this.lastFix?.accuracy }); }
 
   /** 语言切换后刷新界面文字 */
   refresh() {
