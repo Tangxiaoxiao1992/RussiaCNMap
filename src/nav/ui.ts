@@ -125,10 +125,20 @@ export class NavUI {
     return this.compass;
   }
 
+  private tipAt = 0;
+  private showTip() {
+    this.tipAt = Date.now();
+    const el = document.createElement("div");
+    el.className = "gpstip"; el.textContent = t(UI.gpsTip, this.lang);
+    document.getElementById("app")!.appendChild(el);
+    el.addEventListener("click", () => el.remove());
+    setTimeout(() => el.remove(), 12000);
+  }
   private badge: HTMLElement | undefined;
   private showAccuracy(f: Fix) {
     if (!this.badge) { this.badge = document.createElement("div"); this.badge.className = "accbadge"; this.badge.addEventListener("click", () => this.clearManual()); document.getElementById("app")!.appendChild(this.badge); }
     const a = f.accuracy;
+    if (a && a > 100 && !this.offset && Date.now() - this.tipAt > 10 * 60000) this.showTip();
     const corrected = !!this.offset;
     this.badge.textContent = (corrected ? "✎ " : "") + (a ? `±${Math.round(a)}m` : "") + (corrected ? " ✕" : a && a > 100 ? " ?" : "");
     this.badge.style.pointerEvents = corrected ? "auto" : "none";
