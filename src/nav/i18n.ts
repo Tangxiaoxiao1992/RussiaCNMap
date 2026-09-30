@@ -100,6 +100,8 @@ export const UI = {
   voiceOn: { zh: "语音开", en: "Voice on", ru: "Голос вкл." },
   voiceOff: { zh: "语音关", en: "Voice off", ru: "Голос выкл." },
   gpsTip: { zh: "定位精度较差。请在手机设置里打开 Wi-Fi 和蓝牙扫描、选择“精确位置”，并尽量到室外；仍不准可长按地图手动校正。", en: "Weak location fix. Turn on Wi-Fi and Bluetooth scanning and “precise location” in phone settings, and go outdoors. Long-press the map to correct manually.", ru: "Слабый сигнал. Включите Wi-Fi, Bluetooth и «точное местоположение» в настройках, выйдите на улицу. Или удерживайте карту, чтобы поправить вручную." },
+  netOn: { zh: "已切换：抗干扰模式（Wi-Fi/基站定位，精度约几十米，不依赖 GPS 卫星）。请确保已开启 Wi-Fi 和蓝牙扫描。", en: "Anti-jamming mode on (Wi-Fi/cell location, tens of metres, not relying on GPS satellites). Make sure Wi-Fi and Bluetooth scanning are on.", ru: "Режим без GPS включён (Wi-Fi/сотовые сети, точность десятки метров). Включите сканирование Wi-Fi и Bluetooth." },
+  netOff: { zh: "已切换：高精度模式（GPS + Wi-Fi + 基站）", en: "High-accuracy mode on (GPS + Wi-Fi + cell)", ru: "Высокоточный режим (GPS + Wi-Fi + сотовые сети)" },
   manualAsk: { zh: "定位不准？把当前位置设在这里", en: "GPS off? Set my position here", ru: "GPS врёт? Поставить меня сюда" },
   manualHere: { zh: "我在这里", en: "I'm here", ru: "Я здесь" },
   close: { zh: "关闭", en: "Close", ru: "Закрыть" },

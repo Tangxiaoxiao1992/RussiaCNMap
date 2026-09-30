@@ -62,6 +62,10 @@ export class NavUI {
     btn.id = "locate"; btn.className = "locate"; btn.type = "button"; btn.setAttribute("aria-label", "定位 / My location"); btn.textContent = "◎";
     btn.addEventListener("click", () => this.locate(true));
     document.getElementById("app")!.appendChild(btn);
+    const nb = document.createElement("button");
+    nb.id = "netbtn"; nb.className = "locate netbtn" + (this.netMode ? " on" : ""); nb.type = "button"; nb.setAttribute("aria-label", "抗干扰定位 / Anti-jamming location"); nb.textContent = "📶";
+    nb.addEventListener("click", () => void this.toggleNetMode());
+    document.getElementById("app")!.appendChild(nb);
     this.map.on("dragstart", () => { if (this.navigating && this.follow) { this.follow = false; this.renderBar(); } });
     if (this.map.loaded()) this.ensureLayers(); else this.map.once("load", () => this.ensureLayers());
     window.addEventListener("deviceorientationabsolute", (e) => this.onOrient(e as DeviceOrientationEvent));
@@ -74,29 +78,59 @@ export class NavUI {
 
   // ————— 定位（离线可用，靠手机 GPS）
   private watching = false;
-  locate(center: boolean) {
-    if (!this.watching) {
-      this.watching = true;
-      const onPos = (c: { longitude: number; latitude: number; heading?: number | null; speed?: number | null; accuracy?: number }, ts?: number) => {
-        if (ts && Date.now() - ts > 15000) return; // 丢弃过期的缓存定位
-        if (this.isJump(c.longitude, c.latitude)) return; // 瞬间跳几百米的点（干扰/欺骗/基站切换），要连续两次一致才采信
-        this.feed({ lon: c.longitude, lat: c.latitude, heading: c.heading, speed: c.speed, accuracy: c.accuracy });
-      };
-      if (Capacitor.isNativePlatform()) {
-        // 用系统的融合定位（GPS + 网络），比 WebView 自带的 geolocation 准，也会正确弹出权限申请
-        void (async () => {
-          try { await Geolocation.requestPermissions(); } catch { /* 用户拒绝时下面会报错 */ }
-          try {
-            await Geolocation.watchPosition({ enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }, (pos, err) => {
-              if (err || !pos) { console.warn("定位失败", err); return; }
-              onPos(pos.coords, pos.timestamp);
-            });
-          } catch (e) { console.warn("定位失败", e); this.watching = false; }
-        })();
-      } else if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition((p) => onPos(p.coords, p.timestamp), (err) => console.warn("定位失败", err.message), { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-      }
+  private nativeWatch: string | undefined;
+  private webWatch: number | undefined;
+  /** 抗干扰模式：只用 Wi-Fi/基站定位（不强求 GPS），卫星信号被干扰时可能更稳，但精度一般只有几十米 */
+  private netMode = (() => { try { return localStorage.getItem("russiacnmap.netMode") === "1"; } catch { return false; } })();
+
+  private startWatch() {
+    const hi = !this.netMode;
+    const onPos = (c: { longitude: number; latitude: number; heading?: number | null; speed?: number | null; accuracy?: number }, ts?: number) => {
+      if (ts && Date.now() - ts > 15000) return; // 丢弃过期的缓存定位
+      if (this.isJump(c.longitude, c.latitude)) return; // 瞬间跳几百米的点（干扰/欺骗/基站切换），要连续两次一致才采信
+      this.feed({ lon: c.longitude, lat: c.latitude, heading: c.heading, speed: c.speed, accuracy: c.accuracy });
+    };
+    if (Capacitor.isNativePlatform()) {
+      // 用系统的融合定位（GPS + Wi-Fi + 基站），也会正确弹出权限申请
+      void (async () => {
+        try { await Geolocation.requestPermissions(); } catch { /* 用户拒绝时下面会报错 */ }
+        try {
+          this.nativeWatch = await Geolocation.watchPosition({ enableHighAccuracy: hi, timeout: 20000, maximumAge: 0 }, (pos, err) => {
+            if (err || !pos) { console.warn("定位失败", err); return; }
+            onPos(pos.coords, pos.timestamp);
+          });
+        } catch (e) { console.warn("定位失败", e); this.watching = false; }
+      })();
+    } else if ("geolocation" in navigator) {
+      this.webWatch = navigator.geolocation.watchPosition((p) => onPos(p.coords, p.timestamp), (err) => console.warn("定位失败", err.message), { enableHighAccuracy: hi, maximumAge: 0, timeout: 20000 });
     }
+  }
+
+  private async stopWatch() {
+    if (this.nativeWatch !== undefined) { try { await Geolocation.clearWatch({ id: this.nativeWatch }); } catch { /* ignore */ } this.nativeWatch = undefined; }
+    if (this.webWatch !== undefined) { navigator.geolocation.clearWatch(this.webWatch); this.webWatch = undefined; }
+  }
+
+  /** 切换定位模式：高精度（GPS）⇄ Wi-Fi/基站 */
+  async toggleNetMode() {
+    this.netMode = !this.netMode;
+    try { localStorage.setItem("russiacnmap.netMode", this.netMode ? "1" : "0"); } catch { /* ignore */ }
+    this.prevRaw = undefined; this.pendingJump = undefined;
+    document.getElementById("netbtn")?.classList.toggle("on", this.netMode);
+    this.toast(t(this.netMode ? UI.netOn : UI.netOff, this.lang));
+    if (this.watching) { await this.stopWatch(); this.startWatch(); }
+  }
+
+  private toast(text: string) {
+    const el = document.createElement("div");
+    el.className = "gpstip"; el.textContent = text;
+    document.getElementById("app")!.appendChild(el);
+    el.addEventListener("click", () => el.remove());
+    setTimeout(() => el.remove(), 7000);
+  }
+
+  locate(center: boolean) {
+    if (!this.watching) { this.watching = true; this.startWatch(); }
     if (center && this.lastFix) this.map.flyTo({ center: [this.lastFix.lon, this.lastFix.lat], zoom: Math.max(this.map.getZoom(), 15), essential: true });
     else if (center) this.wantCenter = true;
   }
